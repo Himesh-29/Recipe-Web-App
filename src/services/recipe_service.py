@@ -1,4 +1,4 @@
-"""Recipe Generation - Web scraping and AI-powered recipe creation"""
+"""Recipe Service - Web scraping and AI-powered recipe creation"""
 
 import requests
 from bs4 import BeautifulSoup
@@ -295,5 +295,3 @@ def parse_ai_recipe(text, food_name, quantity):
         print(f"[DEBUG] Recipe parsing error: {e}")
     
     return None
-
-# Structured fallback removed - now returns proper error instead

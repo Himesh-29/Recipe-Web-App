@@ -1,7 +1,6 @@
 """AI Models - Food classification and recipe generation"""
 
 import streamlit as st
-from transformers import pipeline
 
 def show_step(message, type="info"):
     """Show execution steps to user"""

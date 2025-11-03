@@ -1,18 +1,39 @@
 # 🍽️ AI Recipe & Nutrition App
 
-Simple AI-powered app that:
-- **Identifies food** from uploaded images using Hugging Face models
-- **Searches web** if food not recognized clearly  
-- **Asks user input** as fallback
-- **Generates recipes** using free AI models (no OpenAI charges)
-- **Provides nutrition info** for specified quantities
+An intelligent web application that analyzes food images and provides personalized recipes with nutritional information.
+
+## Features
+
+- **AI Food Detection** - Upload an image and get instant food identification using Hugging Face models
+- **Smart Recipe Generation** - Get recipes from web scraping or AI-powered generation as fallback
+- **Nutrition Analysis** - Calculate detailed nutrition facts (calories, protein, carbs, fat) for any quantity
+- **User-Friendly Logs** - Track all processing steps with styled, collapsible logs
+- **Modern UI** - Clean, responsive interface built with Streamlit
+
+## How It Works
+
+1. Upload a food image
+2. AI analyzes and identifies the food
+3. Select quantity (in grams)
+4. Get recipe suggestions and nutrition info
+5. View all processing steps in logs
+
+## Project Structure
+
+```
+app.py                 - Main application
+src/
+├── api/              - Hugging Face API clients
+├── services/         - Business logic (recipes, nutrition, search)
+├── core/             - State management
+├── ui/               - UI components
+└── utils/            - Image processing utilities
+```
 
 ## Setup & Run
 
-### Deploy to Streamlit Cloud
-1. Fork this repo
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Deploy with main file: `app.py`
+### Try Online
+👉 **[Open App](https://recipe-web-app-himesh.streamlit.app/)**
 
 ### Run Locally with pip
 ```bash

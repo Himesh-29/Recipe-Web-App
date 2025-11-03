@@ -1,6 +1,6 @@
 import streamlit as st
-from PIL import Image
 import os
+from PIL import Image
 
 # Load environment variables from .env file
 try:
@@ -15,11 +15,14 @@ except ImportError:
                     key, value = line.strip().split('=', 1)
                     os.environ[key] = value
 
-# Import our modules
-from models import load_models, show_step
-from web_search import search_recipe_online
-from recipe_generator import generate_recipe_with_ai
-from nutrition import get_nutrition_info
+# Import from new modular structure
+from src.api.huggingface_client import load_models
+from src.utils.image_utils import load_and_process_image
+from src.ui.components import render_log
+from src.core.state_manager import initialize_session_state, reset_on_new_upload
+from src.services.recipe_service import generate_recipe_with_ai
+from src.services.nutrition_service import get_nutrition_info
+from src.services.web_search_service import search_recipe_online
 
 # Page config
 st.set_page_config(
@@ -29,16 +32,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-def render_log(log_type, message):
-    if log_type == "info":
-        st.markdown(f'<div style="background:#eef4fd;padding:10px;border-radius:8px;margin-bottom:8px;display:flex;align-items:center"><span style="font-size:1.2em;margin-right:8px">📝</span> {message}</div>', unsafe_allow_html=True)
-    elif log_type == "success":
-        st.markdown(f'<div style="background:#eafaf1;padding:10px;border-radius:8px;margin-bottom:8px;display:flex;align-items:center"><span style="font-size:1.2em;margin-right:8px">✅</span> {message}</div>', unsafe_allow_html=True)
-    elif log_type == "error":
-        st.markdown(f'<div style="background:#fdeaea;padding:10px;border-radius:8px;margin-bottom:8px;display:flex;align-items:center"><span style="font-size:1.2em;margin-right:8px">❌</span> {message}</div>', unsafe_allow_html=True)
-    else:
-        st.write(message)
-
 def main():
     # Header using Streamlit components
     st.title("🍽️ AI Recipe & Nutrition Analyzer")
@@ -46,24 +39,7 @@ def main():
     st.divider()
     
     # Initialize session state
-    if 'analysis_done' not in st.session_state:
-        st.session_state.analysis_done = False
-    if 'food_name' not in st.session_state:
-        st.session_state.food_name = ""
-    if 'detection_results' not in st.session_state:
-        st.session_state.detection_results = []
-    if 'generating_recipe' not in st.session_state:
-        st.session_state.generating_recipe = False
-    if 'user_logs' not in st.session_state:
-        st.session_state.user_logs = []
-    if 'recipe_generation_started' not in st.session_state:
-        st.session_state.recipe_generation_started = False
-    if 'recipe_data' not in st.session_state:
-        st.session_state.recipe_data = None
-    if 'nutrition_data' not in st.session_state:
-        st.session_state.nutrition_data = None
-    if 'last_uploaded_file' not in st.session_state:
-        st.session_state.last_uploaded_file = None
+    initialize_session_state()
     
     # Load models
     with st.spinner("Initializing AI services..."):
@@ -81,32 +57,11 @@ def main():
     )
     
     # Reset state when new file is uploaded
-    if uploaded_file:
-        # Check if this is a different file by comparing file name
-        if 'last_uploaded_file' not in st.session_state or st.session_state.last_uploaded_file != uploaded_file.name:
-            st.session_state.last_uploaded_file = uploaded_file.name
-            st.session_state.analysis_done = False
-            st.session_state.food_name = ""
-            st.session_state.detection_results = []
-            st.session_state.generating_recipe = False
-            st.session_state.recipe_generation_started = False
-            st.session_state.recipe_data = None
-            st.session_state.nutrition_data = None
-            st.session_state.user_logs = []
+    reset_on_new_upload(uploaded_file)
     
     if uploaded_file:
-        image = Image.open(uploaded_file)
+        image = load_and_process_image(uploaded_file)
         size = 400
-        img_width, img_height = image.size
-        # Center crop to square
-        if img_width != img_height:
-            min_dim = min(img_width, img_height)
-            left = (img_width - min_dim) // 2
-            top = (img_height - min_dim) // 2
-            right = left + min_dim
-            bottom = top + min_dim
-            image = image.crop((left, top, right, bottom))
-        image = image.resize((size, size), Image.Resampling.LANCZOS)
         st.divider()
         # Main layout: Image on left, everything else on right
         col_left, col_right = st.columns([1, 3], gap="large")
@@ -115,20 +70,20 @@ def main():
             st.image(image, caption="Food Image", width=size)
             # Analysis button - disabled after analysis or during processing
             if not st.session_state.analysis_done:
-                if st.button("🔍 Analyze Food", type="primary", width=size, key="analyze_btn", disabled=bool(st.session_state.user_logs)):
+                if st.button("🔍 Analyze Food", type="primary", use_container_width=True, key="analyze_btn", disabled=bool(st.session_state.user_logs)):
                     st.session_state.user_logs = []  # Clear logs for new analysis
-                    st.session_state.user_logs.append(("info", "Searching for recipes online..."))
+                    st.session_state.user_logs.append(("info", "Analyzing food image..."))
                     st.session_state.show_logs = True
                 # Do the actual analysis without rerun
                 if st.session_state.user_logs and not st.session_state.detection_results:
                     try:
                         results = food_classifier(image, top_k=3)
-                        st.session_state.user_logs.append(("info", f"Food classifier results: {results}"))
+                        st.session_state.user_logs.append(("info", f"Food classifier completed"))
                         st.session_state.detection_results = results
                         if results and results[0]['score'] > 0.3:
                             detected_food = results[0]['label']
                             st.session_state.food_name = detected_food
-                            st.session_state.user_logs.append(("info", f"Detected food: {detected_food}"))
+                            st.session_state.user_logs.append(("success", f"Detected: {detected_food}"))
                         else:
                             if results:
                                 potential_food = results[0]['label']

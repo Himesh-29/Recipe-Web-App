@@ -1,4 +1,4 @@
-"""Web Search - Online recipe search functionality"""
+"""Web Search Service - Online recipe search functionality"""
 
 import requests
 

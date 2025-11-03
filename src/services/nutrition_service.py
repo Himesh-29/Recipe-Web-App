@@ -1,4 +1,4 @@
-"""Nutrition Calculator - Food nutrition analysis"""
+"""Nutrition Service - Food nutrition analysis and calculations"""
 
 def get_nutrition_info(food_name, quantity):
     """Get nutrition information"""
