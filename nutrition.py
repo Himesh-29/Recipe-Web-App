@@ -1,10 +1,7 @@
 """Nutrition Calculator - Food nutrition analysis"""
 
-from models import show_step
-
 def get_nutrition_info(food_name, quantity):
     """Get nutrition information"""
-    show_step("Calculating nutrition information...")
     
     # Basic nutrition database (per 100g)
     nutrition_db = {
@@ -48,8 +45,6 @@ def get_nutrition_info(food_name, quantity):
             "carbs": round(base_nutrition["carbs"] * multiplier, 1),
             "fat": round(base_nutrition["fat"] * multiplier, 1)
         }
-        show_step(f"Nutrition calculated for {quantity}g!", "success")
         return nutrition
     else:
-        show_step("Nutrition data not available for this food", "warning")
         return None

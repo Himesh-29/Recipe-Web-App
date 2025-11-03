@@ -3,20 +3,16 @@
 import requests
 from bs4 import BeautifulSoup
 import re
-from models import show_step
 
 def generate_recipe_with_ai(food_name, quantity, recipe_generator, detected_ingredients=None):
     """Generate recipe using web scraping and AI APIs"""
     
     # Try web scraping first for real recipes - priority!
-    show_step("Searching for recipes online...")
     recipe = scrape_recipe_from_web(food_name, quantity)
     if recipe:
-        show_step("Found recipe online!", "success")
         return recipe
     
     # If web scraping fails, use AI API
-    show_step("Generating recipe with AI...")
     return generate_with_ai_api(food_name, quantity, recipe_generator, detected_ingredients)
 
 def scrape_recipe_from_web(food_name, quantity):
@@ -216,7 +212,6 @@ def scrape_bbc_recipe_page(url, quantity):
 
 def generate_with_ai_api(food_name, quantity, recipe_generator, detected_ingredients=None):
     """Use API for better recipe generation"""
-    show_step("Generating with AI API...")
     
     try:
         # Use detected ingredients or common ones
@@ -229,15 +224,12 @@ def generate_with_ai_api(food_name, quantity, recipe_generator, detected_ingredi
             # Parse the API response
             recipe = parse_ai_recipe(generated_text, food_name, quantity)
             if recipe:
-                show_step("AI recipe generated!", "success")
                 return recipe
         
     except Exception as e:
-        show_step(f"AI API failed: {e}", "warning")
         print(f"[DEBUG] AI API Exception: {e}")  # Internal logging
     
     # No fallback - return None to show error
-    show_step("Recipe generation failed. Please try again or enter food name manually.", "error")
     return None
 
 def parse_ai_recipe(text, food_name, quantity):
