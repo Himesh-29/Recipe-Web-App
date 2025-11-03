@@ -92,3 +92,24 @@ def get_current_step(user_logs):
         if last_type == "info" and ("..." in last_msg or "Analyzing" in last_msg or "Generating" in last_msg or "Calculating" in last_msg):
             return last_msg
     return None
+
+
+def render_rag_stats(rag_manager):
+    """Render RAG cache statistics in sidebar with FAISS info"""
+    stats = rag_manager.get_stats()
+    
+    with st.sidebar:
+        st.divider()
+        st.subheader("🧠 RAG Cache")
+        st.metric("Cached Recipes", stats["total_cached_recipes"])
+        st.metric("Embedding Dim", stats["embedding_dimension"])
+        
+        if stats["model_available"]:
+            st.success("✓ Embeddings Ready")
+        else:
+            st.warning("⚠ Install: pip install sentence-transformers faiss-cpu")
+        
+        if st.button("🗑️ Clear Cache", key="clear_rag_cache"):
+            if rag_manager.clear_cache():
+                st.success("Cache cleared!")
+                st.rerun()

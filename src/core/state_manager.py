@@ -25,6 +25,8 @@ def initialize_session_state():
         st.session_state.last_uploaded_file = None
     if 'show_logs' not in st.session_state:
         st.session_state.show_logs = False
+    if 'analysis_in_progress' not in st.session_state:
+        st.session_state.analysis_in_progress = False
 
 
 def reset_on_new_upload(uploaded_file):
@@ -41,6 +43,20 @@ def reset_on_new_upload(uploaded_file):
             st.session_state.recipe_data = None
             st.session_state.nutrition_data = None
             st.session_state.user_logs = []
+
+
+def clear_image_and_reset():
+    """Clear image and reset state for 'Analyze New Image' button"""
+    st.session_state.analysis_done = False
+    st.session_state.analysis_in_progress = False
+    st.session_state.food_name = ""
+    st.session_state.detection_results = []
+    st.session_state.generating_recipe = False
+    st.session_state.recipe_generation_started = False
+    st.session_state.recipe_data = None
+    st.session_state.nutrition_data = None
+    st.session_state.user_logs = []
+    st.session_state.last_uploaded_file = None
 
 
 def reset_analysis():

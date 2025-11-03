@@ -1,212 +1,45 @@
-"""Recipe Service - Web scraping and AI-powered recipe creation"""
+"""Recipe Service - AI-powered recipe creation with RAG caching and TheMealDB integration"""
 
-import requests
-from bs4 import BeautifulSoup
-import re
+from .shared_cache import embedding_store
+from ..api.themealdb_client import TheMealDBClient
+
+# Initialize TheMealDB client
+themealdb = TheMealDBClient()
 
 def generate_recipe_with_ai(food_name, quantity, recipe_generator, detected_ingredients=None):
-    """Generate recipe using web scraping and AI APIs"""
+    """Generate recipe using smart flow: RAG Cache → TheMealDB → AI API"""
     
-    # Try web scraping first for real recipes - priority!
-    recipe = scrape_recipe_from_web(food_name, quantity)
+    # Step 1: Check if recipe exists in embeddings (unified document with both recipe + nutrition)
+    cached_document = embedding_store.find_similar_recipe(food_name)
+    if cached_document and cached_document.get("recipe"):
+        print(f"[DEBUG] Serving cached recipe for '{food_name}'")
+        return cached_document["recipe"]
+    
+    # Step 2: Try TheMealDB first (real recipes, free, reliable)
+    recipe = themealdb.get_recipe(food_name, quantity)
     if recipe:
+        # Get nutrition data if available from cache or generation
+        nutrition_data = None
+        if cached_document and cached_document.get("nutrition"):
+            nutrition_data = cached_document["nutrition"]
+        
+        # Store unified document (recipe + nutrition) in embeddings for future use
+        embedding_store.add_unified_document(food_name, recipe, nutrition_data)
+        print(f"[DEBUG] Using TheMealDB recipe for '{food_name}'")
         return recipe
     
-    # If web scraping fails, use AI API
-    return generate_with_ai_api(food_name, quantity, recipe_generator, detected_ingredients)
-
-def scrape_recipe_from_web(food_name, quantity):
-    """Scrape recipes from recipe websites"""
-    
-    try:
-        # Try BBC Good Food first - more reliable structure
-        recipe = scrape_bbc_recipes(food_name, quantity)
-        if recipe:
-            return recipe
+    # Step 3: Fall back to AI API (for unique foods not in TheMealDB)
+    recipe = generate_with_ai_api(food_name, quantity, recipe_generator, detected_ingredients)
+    if recipe:
+        # Get nutrition data if available from cache or generation
+        nutrition_data = None
+        if cached_document and cached_document.get("nutrition"):
+            nutrition_data = cached_document["nutrition"]
         
-        # Try AllRecipes as backup
-        search_query = f"{food_name} recipe"
-        search_url = f"https://www.allrecipes.com/search?q={search_query.replace(' ', '+')}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        
-        response = requests.get(search_url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Look for recipe links - updated selectors
-        recipe_links = soup.find_all('a', href=re.compile(r'/recipe/\d+'))
-        
-        if recipe_links:
-            # Get the first recipe
-            first_recipe_url = recipe_links[0].get('href')
-            if not first_recipe_url.startswith('http'):
-                first_recipe_url = "https://www.allrecipes.com" + first_recipe_url
-            
-            recipe = scrape_allrecipes_page(first_recipe_url, quantity)
-            if recipe:
-                return recipe
-        
-        return None
-        
-    except Exception as e:
-        print(f"[DEBUG] Web scraping failed: {e}")
-        return None
-
-def scrape_allrecipes_page(url, quantity):
-    """Scrape specific recipe from AllRecipes"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Extract recipe name - try multiple selectors
-        title_elem = (soup.find('h1', class_='article-heading') or 
-                     soup.find('h1', class_='headline') or 
-                     soup.find('h1'))
-        recipe_name = title_elem.text.strip() if title_elem else f"{quantity}g Recipe"
-        
-        # Extract ingredients - try multiple modern selectors
-        ingredients = []
-        
-        # Try structured data first
-        ingredient_elems = soup.select('li[class*="ingredient"], span[class*="ingredient"]')
-        if not ingredient_elems:
-            # Try alternative selectors
-            ingredient_elems = soup.find_all('li', attrs={'data-ingredient': True})
-        
-        for elem in ingredient_elems[:15]:
-            text = elem.get_text(strip=True)
-            if text and len(text) > 2:
-                ingredients.append(text)
-        
-        # Extract instructions - try multiple selectors
-        instructions = []
-        
-        # Try structured data
-        instruction_elems = soup.select('li[class*="instruction"], p[class*="instruction"]')
-        if not instruction_elems:
-            # Try alternative selectors
-            instruction_elems = soup.find_all('li', attrs={'data-step': True})
-        
-        for elem in instruction_elems[:12]:
-            text = elem.get_text(strip=True)
-            if text and len(text) > 15:
-                instructions.append(text)
-        
-        if ingredients and instructions:
-            print(f"[DEBUG] Scraped AllRecipes: {recipe_name} with {len(ingredients)} ingredients and {len(instructions)} steps")
-            return {
-                "name": recipe_name,
-                "ingredients": ingredients[:12],
-                "instructions": instructions[:10],
-                "quantity": f"{quantity}g serving"
-            }
-        else:
-            print(f"[DEBUG] AllRecipes scrape incomplete - ingredients: {len(ingredients)}, instructions: {len(instructions)}")
-        
-    except Exception as e:
-        print(f"[DEBUG] AllRecipes scraping error: {e}")
-    
-    return None
-
-def scrape_bbc_recipes(food_name, quantity):
-    """Scrape BBC Good Food as primary source"""
-    try:
-        search_url = f"https://www.bbcgoodfood.com/search?q={food_name.replace(' ', '+')}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        
-        response = requests.get(search_url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Look for recipe cards - try multiple selectors
-        recipe_links = soup.find_all('a', href=re.compile(r'/recipes/'))
-        
-        if not recipe_links:
-            # Try alternative selector
-            recipe_links = soup.select('a[href*="/recipes/"]')
-        
-        for link in recipe_links[:3]:  # Try first 3 results
-            recipe_url = link.get('href', '')
-            if recipe_url and '/recipes/' in recipe_url:
-                if not recipe_url.startswith('http'):
-                    recipe_url = "https://www.bbcgoodfood.com" + recipe_url
-                
-                recipe = scrape_bbc_recipe_page(recipe_url, quantity)
-                if recipe:
-                    return recipe
-        
-    except Exception as e:
-        print(f"[DEBUG] BBC scraping failed: {e}")
-    
-    return None
-
-def scrape_bbc_recipe_page(url, quantity):
-    """Scrape specific BBC recipe page"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Extract title - try multiple selectors
-        title_elem = soup.find('h1') or soup.find('h1', class_='heading-1')
-        recipe_name = title_elem.text.strip() if title_elem else f"{quantity}g Recipe"
-        
-        # Extract ingredients - try multiple selectors
-        ingredients = []
-        
-        # Try modern BBC structure
-        ingredient_elems = soup.select('li.pb-xxs, li[class*="ingredient"]')
-        if not ingredient_elems:
-            # Try alternative structure
-            ingredient_section = soup.find('section', class_='recipe__ingredients')
-            if ingredient_section:
-                ingredient_elems = ingredient_section.find_all('li')
-        
-        for elem in ingredient_elems:
-            text = elem.get_text(strip=True)
-            if text and len(text) > 2 and not text.lower().startswith(('method', 'instruction', 'step')):
-                ingredients.append(text)
-        
-        # Extract method/instructions
-        instructions = []
-        
-        # Try modern BBC structure
-        method_elems = soup.select('li.pb-xs, li[class*="method"]')
-        if not method_elems:
-            # Try alternative structure
-            method_section = soup.find('section', class_='recipe__method')
-            if method_section:
-                method_elems = method_section.find_all('li')
-        
-        for elem in method_elems:
-            text = elem.get_text(strip=True)
-            if text and len(text) > 15:  # Reasonable instruction length
-                instructions.append(text)
-        
-        if ingredients and instructions:
-            print(f"[DEBUG] Scraped BBC recipe: {recipe_name} with {len(ingredients)} ingredients and {len(instructions)} steps")
-            return {
-                "name": recipe_name,
-                "ingredients": ingredients[:12],
-                "instructions": instructions[:10],
-                "quantity": f"{quantity}g serving"
-            }
-        else:
-            print(f"[DEBUG] BBC scrape incomplete - ingredients: {len(ingredients)}, instructions: {len(instructions)}")
-        
-    except Exception as e:
-        print(f"[DEBUG] BBC recipe page scraping error: {e}")
+        # Store unified document (recipe + nutrition) in embeddings for future use
+        embedding_store.add_unified_document(food_name, recipe, nutrition_data)
+        print(f"[DEBUG] Using AI-generated recipe for '{food_name}'")
+        return recipe
     
     return None
 

@@ -151,3 +151,67 @@ Keep it concise and practical."""
             print(f"[DEBUG] Recipe generation Exception: {e}")  # Internal logging
             show_step(f"Recipe generation API error: {e}", "warning")
             return None
+    
+    def get_nutrition_facts(self, food_name):
+        """Fetch nutrition facts per 100g of food using AI"""
+        import requests
+        from ..services.nutrition_service import parse_nutrition_response
+        
+        # Create focused prompt for nutrition facts only
+        prompt = f"""Provide nutrition facts for {food_name} per 100g in this exact format ONLY:
+Calories: [number]
+Protein: [number]
+Carbs: [number]
+Fat: [number]
+
+Do not include units or any other text. Only these 4 lines."""
+        
+        payload = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "model": "meta-llama/Llama-3.1-8B-Instruct",
+            "max_tokens": 100,
+            "temperature": 0.3  # Lower temperature for more consistent nutrition values
+        }
+        
+        try:
+            print(f"[DEBUG] Calling Llama API for nutrition: {self.api_url}")
+            print(f"[DEBUG] Nutrition prompt for: {food_name}")
+            
+            response = requests.post(
+                self.api_url, 
+                headers=self.headers,
+                json=payload, 
+                timeout=30
+            )
+            print(f"[DEBUG] Nutrition API Response Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                if "choices" in result and result["choices"]:
+                    nutrition_text = result["choices"][0]["message"]["content"]
+                    print(f"[DEBUG] Nutrition API Response: {nutrition_text}")
+                    
+                    # Parse the nutrition response
+                    from ..services.nutrition_service import parse_nutrition_response
+                    nutrition = parse_nutrition_response(nutrition_text)
+                    
+                    if nutrition:
+                        print(f"[DEBUG] Successfully parsed nutrition for {food_name}: {nutrition}")
+                        return nutrition
+                    else:
+                        print(f"[DEBUG] Failed to parse nutrition from: {nutrition_text}")
+                else:
+                    print(f"[DEBUG] No choices in nutrition API response")
+            else:
+                print(f"[DEBUG] Nutrition API Error: {response.text}")
+                
+        except Exception as e:
+            print(f"[DEBUG] Nutrition API Exception: {e}")
+        
+        return None

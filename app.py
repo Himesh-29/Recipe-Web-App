@@ -18,11 +18,13 @@ except ImportError:
 # Import from new modular structure
 from src.api.huggingface_client import load_models
 from src.utils.image_utils import load_and_process_image
-from src.ui.components import render_log
-from src.core.state_manager import initialize_session_state, reset_on_new_upload
+from src.ui.components import render_log, render_rag_stats
+from src.core.state_manager import initialize_session_state, reset_on_new_upload, clear_image_and_reset
 from src.services.recipe_service import generate_recipe_with_ai
 from src.services.nutrition_service import get_nutrition_info
 from src.services.web_search_service import search_recipe_online
+from src.services.rag_manager import rag_manager
+from src.services.cache_migration import check_migration_needed, migrate_cache_to_unified_format
 
 # Page config
 st.set_page_config(
@@ -37,6 +39,14 @@ def main():
     st.title("🍽️ AI Recipe & Nutrition Analyzer")
     st.markdown("Upload a food image to get personalized recipes and nutrition info!")
     st.divider()
+    
+    # Run cache migration if needed (converts old format to unified documents)
+    if check_migration_needed():
+        with st.spinner("Upgrading cache format..."):
+            migrate_cache_to_unified_format()
+    
+    # Display RAG cache stats in sidebar
+    render_rag_stats(rag_manager)
     
     # Initialize session state
     initialize_session_state()
@@ -70,12 +80,13 @@ def main():
             st.image(image, caption="Food Image", width=size)
             # Analysis button - disabled after analysis or during processing
             if not st.session_state.analysis_done:
-                if st.button("🔍 Analyze Food", type="primary", use_container_width=True, key="analyze_btn", disabled=bool(st.session_state.user_logs)):
+                if st.button("🔍 Analyze Food", type="primary", use_container_width=True, key="analyze_btn", disabled=st.session_state.analysis_in_progress):
+                    st.session_state.analysis_in_progress = True
                     st.session_state.user_logs = []  # Clear logs for new analysis
                     st.session_state.user_logs.append(("info", "Analyzing food image..."))
                     st.session_state.show_logs = True
                 # Do the actual analysis without rerun
-                if st.session_state.user_logs and not st.session_state.detection_results:
+                if st.session_state.analysis_in_progress and not st.session_state.detection_results:
                     try:
                         results = food_classifier(image, top_k=3)
                         st.session_state.user_logs.append(("info", f"Food classifier completed"))
@@ -91,20 +102,15 @@ def main():
                                 st.session_state.food_name = potential_food
                                 st.session_state.user_logs.append(("info", f"Fallback food: {potential_food}"))
                         st.session_state.analysis_done = True
+                        st.session_state.analysis_in_progress = False
                     except Exception as e:
                         st.session_state.user_logs.append(("error", f"Analysis failed: {e}"))
+                        st.session_state.analysis_in_progress = False
                         st.error(f"Analysis failed: {e}")
                         return
             else:
                 if st.button("🔄 Analyze New Image", type="secondary", use_container_width=True, key="reset_btn"):
-                    st.session_state.analysis_done = False
-                    st.session_state.food_name = ""
-                    st.session_state.detection_results = []
-                    st.session_state.generating_recipe = False
-                    st.session_state.recipe_generation_started = False
-                    st.session_state.recipe_data = None
-                    st.session_state.nutrition_data = None
-                    st.session_state.user_logs = []
+                    clear_image_and_reset()
                     st.rerun()
         with col_right:
             if not st.session_state.analysis_done:
@@ -170,7 +176,7 @@ def main():
                     if recipe:
                         st.session_state.user_logs.append(("success", "AI recipe generated!"))
                     
-                    nutrition = get_nutrition_info(food_name, quantity)
+                    nutrition = get_nutrition_info(food_name, quantity, recipe_generator)
                     st.session_state.nutrition_data = nutrition
                     if nutrition:
                         st.session_state.user_logs.append(("info", "Calculating nutrition information..."))
