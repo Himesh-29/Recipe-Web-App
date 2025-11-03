@@ -1,8 +1,5 @@
 streamlit
-transformers>=4.21.0
-torch>=2.6.0
-torchvision>=0.17.0
 pillow
 requests
-safetensors
 beautifulsoup4
+python-dotenv
