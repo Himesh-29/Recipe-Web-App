@@ -1,6 +1,12 @@
 import streamlit as st
 import os
 from PIL import Image
+from datetime import datetime
+
+# Handle UptimeRobot monitoring pings
+if 'heartbeat' in st.query_params:
+    st.write(f"✅ App is alive at {datetime.now()}")
+    st.stop()
 
 # Load environment variables from .env file
 try:
